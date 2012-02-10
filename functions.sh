@@ -185,7 +185,6 @@ ignore() {
 }
 
 # Check a group.
-### TODO: This is a bit hacky.
 check() {
 	log check "${@}"
 	addRule "-" "${@}"
@@ -215,6 +214,10 @@ addRule() {
 	RULE=""
 	PROTO=""
 	CUSTOMCHAIN=""
+
+	GROUP=""
+	GROUPCHAIN=""
+	CHECKCHAIN=""
 
 	while [ -n "$*" ]; do
 		############################
@@ -293,7 +296,6 @@ addRule() {
 		elif [ "${1}" = "if" -o "${1}" = "check" -o "${1}" = "group" ]; then
 			shift;
 			if [ "${1}" = "group" ]; then shift; fi
-				### TODO: Groups currently suck, they should be done as sets...
 			GROUP="${1}"
 			if [ "${CUSTOMCHAIN}" != "" ]; then
 				echo "Unable to set CHAIN to: ${CHAIN}"
@@ -301,8 +303,8 @@ addRule() {
 			else
 				CUSTOMCHAIN="1"
 			fi;
-			checkGroupChain ${GROUP} ${CHAIN}
-			CHAIN="GROUP-${GROUP}"
+			CHECKCHAIN="${CHAIN}"
+			GROUPCHAIN="GROUP-${GROUP}"
 
 
 		############################
@@ -329,6 +331,15 @@ addRule() {
 		fi;
 		shift;
 	done;
+
+	if [ "${GROUPCHAIN}" != "" ]; then
+		if [ "${RULE}" = "" ]; then
+			checkGroupChain ${GROUP} ${CHECKCHAIN}
+		else
+			checkGroup ${GROUP}
+			ACTION=${GROUPCHAIN}
+		fi;
+	fi;
 
 	if [ "${ACTION}" != "-" ]; then
 		applyRule "-A ${CHAIN} ${RULE} -j ${ACTION}"
@@ -390,7 +401,6 @@ addHost() {
 	fi;
 
 	if [ "${1}" = "group" ]; then
-		### TODO: Groups currently suck, they should be done as sets...
 		shift;
 		GROUP=${1}
 		shift
