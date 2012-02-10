@@ -1,8 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
 # This shouldn't really need to be edited.
 #
-# rules.sh is where you want to be!
+# rules.rules is where you want to be!
 
 # Find out where we are and load functions.
 BASEDIR=${0%/*}
@@ -30,9 +30,15 @@ fi;
 
 # Finally, its rule time!
 
-if [ -e "${BASEDIR}/rules.sh" ]; then
-	. ${BASEDIR}/rules.sh;
+if [ "${1}" = "" ]; then
+	RULES="rules"
 else
-	echo "Unable to find rules";
+	RULES="${1}"
+fi;
+
+if [ -e "${BASEDIR}/${RULES}.rules" ]; then
+	. ${BASEDIR}/${RULES}.rules;
+else
+	echo "Unable to find rules file ${RULES}.rules";
 	exit 1;
 fi;
