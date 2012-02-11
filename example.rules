@@ -2,17 +2,17 @@
 # mode debug
 
 # Don't echo what is being done
-mode silent
+# mode silent
 
-# Be fast not safe
+# Be fast not safe (turn off some checking in fwset and fwget that slows things down)
 mode fast
 
 # IPV6 Mode
 mode ipv6
 
 # Settings to use later
-fwset LANIF to br0
-fwset WANIF to ppp0
+add interface alias br0 as LANIF
+add interface alias ppp0 as WANIF
 
 # Clear the tables
 empty INPUT
@@ -30,29 +30,49 @@ allow input on lo
 allow input on LANIF
 
 # Allow established
+allow forward state NEW from LANIF to WANIF
 allow all state RELATED,ESTABLISHED
+
+# Block RH0 - needs raw rules for now.
+add raw -A INPUT -m rt --rt-type 0 -j DROP
+add raw -A OUTPUT -m rt --rt-type 0 -j DROP
+add raw -A FORWARD -m rt --rt-type 0 -j DROP
+
+# Allow anything in from local network
+allow input from LANIF
+allow output to LANIF
+
+# Allow Link-Local
+add local network alias LINKLOCAL fe80::/10
+allow all from LINKLOCAL
+
+# Allow Multicast
+add local network alias MULTICAST ff00::/8
+allow all from MULTICAST
 
 # Our trusted hosts.
 add external host alias MIFUNE 2001:470:1f12:d54::2 group TRUSTED
 add external host alias SOREN 2001:470:4:598::2 group TRUSTED
 
 # Banned Hosts
-# add external host 2001:470:1f12:d54::2 group BANNED action DROP comment "test comment"
+add external network 2001:db8::/32 group BANNED action DROP comment "Documentation Prefix..."
 
 # Check both groups
 check all group TRUSTED
 check all group BANNED
+# check input group TRUSTED on port 22
 
 # Our internal hosts.
 add host alias XION 2001:4d48:ad51:15df:250:8dff:fe9c:18b0
 add host alias NEO 2001:4d48:ad51:15df:224:1dff:fec5:c07b
 
 # Allow ports to neo
-allow input protocol tcp on port 22 to NEO
-allow input protocol tcp on port 80 to NEO
+allow input protocol tcp on port ssh to NEO
+allow input protocol tcp on port http to NEO
 allow input protocol tcp on port 53 to NEO
 allow input protocol udp on port 53 to NEO
-allow input protocol tcp on port 25 to NEO
-allow input protocol tcp on port 443 to NEO
+allow input protocol tcp on port smtp to NEO
+allow input protocol tcp on port https to NEO
 
-# allow input protocol ipv6-icmp to XION
+# Allow ICMPv6
+allow all protocol ipv6-icmp

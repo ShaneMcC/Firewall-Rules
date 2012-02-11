@@ -127,10 +127,9 @@ log() {
 	fi;
 }
 
-# This currently does nothing.
-begin() {
-	echo -n ""
-}
+# Ignore a rule!
+ignore() { echo -n ""; }
+REM() { echo -n ""; }
 
 # Flush a chain...
 flush() { empty $@; }
@@ -203,6 +202,7 @@ addRule() {
 	elif [ "${1}" = "all" ]; then
 		shift;
 		addRule ${ACTION} input "${@}"
+		addRule ${ACTION} output "${@}"
 		addRule ${ACTION} forward "${@}"
 		return;
 	else
@@ -256,12 +256,19 @@ addRule() {
 					RULE=${RULE}' -p tcp'
 				fi;
 				RULE=${RULE}' --sport "'${1}'"'
+			elif [ "${1}" = "interface" ]; then
+				shift;
+				TARGET=`fwget ${1}`
+				RULE=${RULE}' -i "'${TARGET}'"'
 			else
 				TARGET=`fwget ${1}`
 				ISHOST=`fwgettype "HOST" "${1}"`
+				ISINTERFACE=`fwgettype "INTERFACE" "${1}"`
 				if [ "${CUSTOMCHAIN}" = "" -a "${ISHOST}" = "1" ]; then
 					CHAIN="${1}-OUT"
 					CUSTOMCHAIN="1"
+				elif [ "${ISINTERFACE}" = "1" ]; then
+					RULE=${RULE}' -i "'${TARGET}'"'
 				else
 					RULE=${RULE}' -s "'${TARGET}'"'
 				fi;
@@ -279,12 +286,19 @@ addRule() {
 					RULE=${RULE}' -p tcp'
 				fi;
 				RULE=${RULE}' --dport "'${1}'"'
+			elif [ "${1}" = "interface" ]; then
+				shift;
+				TARGET=`fwget ${1}`
+				RULE=${RULE}' -o "'${TARGET}'"'
 			else
 				TARGET=`fwget ${1}`
 				ISHOST=`fwgettype "HOST" "${1}"`
+				ISINTERFACE=`fwgettype "INTERFACE" "${1}"`
 				if [ "${CUSTOMCHAIN}" = "" -a "${ISHOST}" = "1" ]; then
 					CHAIN="${1}-IN"
 					CUSTOMCHAIN="1"
+				elif [ "${ISINTERFACE}" = "1" ]; then
+					RULE=${RULE}' -o "'${TARGET}'"'
 				else
 					RULE=${RULE}' -d "'${TARGET}'"'
 				fi;
@@ -348,27 +362,55 @@ addRule() {
 
 add() {
 	log add "${@}"
-	if [ "${1}" = "host" ]; then
+	if [ "${1}" = "host" -o "${1}" = "network" -o "${1}" = "net" ]; then
 		shift;
 		addHost "${@}"
-	elif [ "${1}" = "internal" -a "${2}" = "host" ]; then
-		shift; shift;
-		addHost internal "${@}"
-	elif [ "${1}" = "external" -a "${2}" = "host" ]; then
-		shift; shift;
-		addHost external "${@}"
+	elif [ "${1}" = "internal" -o "${1}" = "external" -o "${1}" = "local" ]; then
+		DIR=${1}
+		shift;
+		if [ "${1}" = "host" -o "${1}" = "network" -o "${1}" = "net" ]; then
+			shift;
+			addHost "${DIR}" "${@}"
+		else
+			echo "Unable to process add rule"
+			exit 1;
+		fi;
+	elif [ "${1}" = "interface" ]; then
+		shift;
+		interface "${@}"
 	elif [ "${1}" = "rule" ]; then
 		shift;
 		addRule "${@}"
 	elif [ "${1}" = "raw" ]; then
 		shift;
-		${IPT} "${@}"
+		applyRule "${@}"
+	else
+		echo "Unable to process add rule"
+		exit 1;
 	fi;
+}
+
+interface() {
+	KEYWORD="to"
+	if [ "${1}" = "alias" -o "${1}" = "name" -o "${1}" = "add"  ]; then shift; fi;
+	ALIAS=${1};
+	shift;
+	if [ "${1}" = "to" -o "${1}" = "is" -o "${1}" = "as"  ]; then KEYWORD="${1}"; shift; fi;
+	INTERFACE=${1};
+
+	if [ "${KEYWORD}" = "as" ]; then
+		TEMP=${ALIAS}
+		ALIAS=${INTERFACE}
+		INTERFACE=${TEMP}
+	fi;
+
+	fwset ${ALIAS} ${INTERFACE}
+	fwsettype "INTERFACE" "${ALIAS}" "1"
 }
 
 addHost() {
 	TYPE="internal"
-	if [ "${1}" = "external" -o "${1}" = "internal" ]; then
+	if [ "${1}" = "external" -o "${1}" = "internal" -o "${1}" = "local" ]; then
 		TYPE="${1}"
 		shift;
 	fi

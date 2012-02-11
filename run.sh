@@ -21,7 +21,7 @@ else
 	exit 1;
 fi;
 
-# Test functions
+# Test functions.sh has loaded.
 TEST=`do_test 2>/dev/null`
 if [ "${TEST}" = "" ]; then
 	echo "Unable to load functions";

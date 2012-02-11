@@ -1,0 +1,37 @@
+= Firewall Rules =
+
+== About ==
+
+This script will allow you to write "formatted-english" rules for an iptables-based firewall rather than needing to write iptables scripts.
+
+Anyone who reads the rules file should be able to know instantly what it does, without needing to understand iptables.
+
+== Why? ==
+
+After recently adding native IPv6 connectivity to my network, I had a need to write a script for my router/firewall for ip6tables-based firewall which runs [[www.endian.com|endian]] which doesn't yet support IPv6 - so I couldn't use the UI.
+
+Initially I started off with the usual .sh file of iptables commands, but didn't really like the output primarily aesthetically, so a few hours later long after I should have been asleep for work the next day, I had the first version of this instead.
+
+== Why on earth is the parser written in Bash? ==
+Good Question. My language of choice would have been PHP, but [[www.endian.com|endian]] doesn't have php, and I hate perl and am not a huge fan of python.
+
+(Admitedly, it also doesn't have ip6tables... but I compiled that by hand for it earlier in the night when i was writing the ip6tables script)
+
+== Usage ==
+Create a "rules.rules" file with the rules to implement.
+
+See example.rules for some examples.
+
+I'll get some proper documentation up at some point, for now just look at the examples. Also remember, that technically the .rules file is a bash script (functions.sh just implements a bunch of functions with names that allow the rules file to look like english) so you can do more advanced things - but that kinda defeats the point :)
+
+== Future ==
+Currently this implements only what I need it to (with one exception). As I have more needs then it will be changed/updated/improved to accomodate. This is for non-natting firewalls (so IPv6, or Bridging IPv4). If I move away from [[www.endian.com|endian]], this might change. Don't hold your breath, see "patches".
+
+== Bugs/Features/Comments ==
+
+For the most part, this is a big massive hack. There *will* be  bugs. If you find one, raise it on the [[https://github.com/ShaneMcC/Firewall-Rules/issues|issue tracker]]. The issue tracker can also be used for feature requests.
+
+Comments should go to [[mailto:shanemcc@gmail.com|shanemcc@gmail.com]]
+
+== Patches ==
+I'm not fond of patch files, but by all means submit any pull requests for improvesments or fixes and I'll review.
