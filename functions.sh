@@ -55,10 +55,23 @@ fwgettype() {
 
 applyRule() {
 	if [ "${IPT}" != "" ]; then
-		if [ "${IS_DEBUG}" = "1" ]; then
-			echo "${IPT} "${@}""
+
+		TABLE=`fwgettype "internal" "__table"`
+		if [ "${TABLE}" = "filter" -o "${TABLE}" = "__table" ]; then
+			TABLE=""
 		else
-			eval ${IPT} "${@}"
+			TABLE=" -t ${TABLE}"
+		fi;
+
+		if [ "${IS_DEBUG}" = "1" ]; then
+			echo "${IPT}${TABLE} "${@}""
+		else
+			eval ${IPT}${TABLE} "${@}"
+			RES=${?}
+			if [ "${IS_STRICT}" = "1" -a "${RES}" != "0" ]; then
+				echo "# Error with iptables command." >&2
+				exit 1;
+			fi;
 		fi;
 	fi;
 }
@@ -75,6 +88,12 @@ mode() {
 			export IS_DEBUG="1"
 		else
 			export IS_DEBUG="0"
+		fi;
+	elif [ "${1}" = "strict" ]; then
+		if [ "${IS_STRICT}" != "1" ]; then
+			export IS_STRICT="1"
+		else
+			export IS_STRICT="0"
 		fi;
 	elif [ "${1}" = "fast" ]; then
 		if [ "${IS_FAST}" != "1" ]; then
@@ -98,9 +117,9 @@ findiptbinary() {
 	BIN="${1}"
 
 	# Find Binary.
-	RES=`which s${BIN} 2>/dev/null`;
+	RES=`which ${BIN} 2>/dev/null`;
 	if [ "${RES}" = "" ]; then
-		RES=`which sxtables-multi 2>/dev/null`;
+		RES=`which xtables-multi 2>/dev/null`;
 		if [ "${RES}" != "" ]; then
 			RES="${RES} ${BIN}"
 		fi;
@@ -114,10 +133,22 @@ findiptbinary() {
 	fi;
 }
 
+# Show a deprecatation notice.
+deprecated() {
+	echo -n "# NOTE: '${1}' is deprecated. " >&2
+	if [ "" != "${2}" ]; then
+		echo "Instead you should use: ${2}" >&2
+	else
+		echo "" >&2
+	fi;
+	if [ "${IS_STRICT}" = "1" ]; then
+		exit 1;
+	fi;
+}
 
 # Log a line
 log() {
-	if [ "${IS_SILENT}" != "1" ]; then
+	if [ "${IS_SILENT}" != "1" -a "${NOLOG}" != "1" ]; then
 		if [ "${IS_DEBUG}" = "1" ]; then
 			echo ""
 			echo "# " "${@}"
@@ -138,15 +169,122 @@ empty() {
 	if [ "${1}" = '' ]; then
 		applyRule "-F"
 		applyRule "-X"
+	elif [ "${1}" = 'ALL' -o "${1}" = 'all' ]; then
+		applyRule "-F INPUT"
+		applyRule "-F FORWARD"
+		applyRule "-F OUTPUT"
+		applyRule "-F"
+		applyRule "-X"
 	else
 		applyRule "-F '${1}'"
 	fi;
 }
 
+# NOOP, for formatting
+begin() { echo -n ""; }
+end() { echo -n ""; }
+
+checkTable() {
+	TABLE="${1}"
+	RES=""
+	if [ "${TABLE}" = "" -o "${TABLE}" = "default" -o "${TABLE}" = "__table" ]; then
+		RES="filter"
+	elif [ "${FWMODE}" = "ipv6" ]; then
+		RES=`cat /proc/net/ip6_tables_names | grep "^${TABLE}$"`
+	elif [ "${FWMODE}" = "ipv4" ]; then
+		RES=`cat /proc/net/ip_tables_names | grep "^${TABLE}$"`
+	fi;
+	echo ${RES};
+}
+
+with() {
+	log with "${@}"
+	if [ "${1}" = "table" ]; then
+		shift;
+		doTableWith "${@}"
+	fi;
+}
+
+table() {
+	log table "${@}"
+	doTable "${@}"
+}
+
+doTable() {
+	TABLE=${1}
+	if [ "${TABLE}" = "default" ]; then TABLE="filter"; fi;
+	TABLE=`checkTable ${TABLE}`
+	if [ "${TABLE}" != "" ]; then
+		fwsettype "internal" "__table" "${TABLE}"
+	else
+		echo "# Invalid table name: ${1}"
+		exit 1;
+	fi;
+}
+
+doTableWith() {
+	OLDTABLE=`fwgettype "internal" "__table"`
+	doTable "${@}"
+	shift;
+	if [ "${1}" != "" ]; then
+		NOLOG="1"
+		if [ "${1}" = "with" ]; then
+			echo "# Nested 'with' commands are not allowed" >&2
+			exit 1;
+		else
+			eval "${@}"
+		fi;
+		if [ "${OLDTABLE}" = "__table" ]; then OLDTABLE=""; fi
+		fwsettype "internal" "__table" "${OLDTABLE}"
+		NOLOG="0"
+	fi;
+}
+
+input() {
+	log input "${@}"
+	doChainCommand input "${@}"
+}
+forward() {
+	log forward "${@}"
+	doChainCommand forward "${@}"
+}
+output() {
+	log output "${@}"
+	doChainCommand output "${@}"
+}
+
+all() {
+	log all "${@}"
+	doChainCommand input "${@}"
+	doChainCommand forward "${@}"
+	doChainCommand output "${@}"
+}
+
+doChainCommand() {
+	CHAIN=""
+
+	if [ "${1}" = "input" ]; then CHAIN="INPUT";
+	elif [ "${1}" = "output" ]; then CHAIN="OUTPUT";
+	elif [ "${1}" = "forward" ]; then CHAIN="FORWARD";
+	elif [ "${1}" = "prerouting" ]; then CHAIN="PREROUTING";
+	elif [ "${1}" = "postrouting" ]; then CHAIN="POSTROUTING";
+	fi
+	shift;
+
+	if [ "${1}" = "policy" ]; then
+		shift;
+		if [ "${1}" = "is" ]; then shift; fi
+		VALUE="${1}"
+		if [ "${CHAIN}" != "" -a "${VALUE}" != "" ]; then
+			applyRule "-P '${CHAIN}' '${VALUE}'"
+		fi;
+	fi;
+}
 
 # Set the policy for a chain
 policy() {
 	log policy "${@}"
+	deprecated policy "<chain> policy is <policy>"
 	if [ "${1}" = "for" ]; then shift; fi
 	CHAIN="${1}"
 	shift;
@@ -189,6 +327,14 @@ check() {
 	addRule "-" "${@}"
 }
 
+masquerade() {
+	log masquerade "${@}"
+	OLDTABLE=`fwgettype "internal" "__table"`
+	doTable "nat"
+	addRule MASQUERADE postrouting "${@}"
+	if [ "${OLDTABLE}" = "__table" ]; then OLDTABLE=""; fi
+	doTable "${OLDTABLE}"
+}
 
 addRule() {
 	ACTION="${1}"
@@ -199,6 +345,10 @@ addRule() {
 		CHAIN="FORWARD"
 	elif [ "${1}" = "output" -o "${1}" = "outbound" ]; then
 		CHAIN="OUTPUT"
+	elif [ "${1}" = "prerouting" ]; then
+		CHAIN="PREROUTING";
+	elif [ "${1}" = "postrouting" ]; then
+		CHAIN="POSTROUTING";
 	elif [ "${1}" = "all" ]; then
 		shift;
 		addRule ${ACTION} input "${@}"
@@ -277,7 +427,7 @@ addRule() {
 		############################
 		## to [port]
 		############################
-		elif [ "${1}" = "to" ]; then
+		elif [ "${1}" = "to" -o "${1}" = "out" ]; then
 			shift;
 			if [ "${1}" = "port" ]; then
 				shift;

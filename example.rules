@@ -14,16 +14,13 @@ mode ipv6
 add interface alias br0 as LANIF
 add interface alias ppp0 as WANIF
 
-# Clear the tables
-empty INPUT
-empty OUTPUT
-empty FORWARD
-empty
+# Clear the chains
+empty all
 
 # Set default policies
-policy for INPUT is DROP
-policy for OUTPUT is ALLOW
-policy for FORWARD is DROP
+input policy is drop
+output policy is drop
+forward policy is drop
 
 # Allow local and loopback
 allow input on lo
