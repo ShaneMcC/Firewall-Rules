@@ -84,10 +84,10 @@ mode() {
 		fi;
 	elif [ "${1}" = "ipv6" ]; then
 		export FWMODE="${1}"
-		export IPT=`findiptbinary ip6tables`
+		findiptbinary ip6tables
 	elif [ "${1}" = "ipv4" ]; then
 		export FWMODE="${1}"
-		export IPT=`findiptbinary iptables`
+		findiptbinary iptables
 	elif [ "${1}" = "null" ]; then
 		export FWMODE="${1}"
 		export IPT=""
@@ -97,20 +97,20 @@ mode() {
 findiptbinary() {
 	BIN="${1}"
 
-	# Find `ip6tables`
-	RES=`which ${BIN} 2>/dev/null`;
+	# Find Binary.
+	RES=`which s${BIN} 2>/dev/null`;
 	if [ "${RES}" = "" ]; then
-		RES=`which xtables-multi 2>/dev/null`;
+		RES=`which sxtables-multi 2>/dev/null`;
 		if [ "${RES}" != "" ]; then
 			RES="${RES} ${BIN}"
 		fi;
 	fi;
 
 	if [ "${RES}" = "" ]; then
-		echo "Unable to find ${BIN}";
+		echo "Unable to find ${BIN}" >&2
 		exit 1;
 	else
-		echo ${RES}
+		export IPT=${RES}
 	fi;
 }
 
@@ -206,7 +206,7 @@ addRule() {
 		addRule ${ACTION} forward "${@}"
 		return;
 	else
-		echo "Invalid Direction: ${1}"
+		echo "Invalid Direction: ${1}" >&2
 		exit 1;
 	fi;
 	shift;
@@ -312,7 +312,7 @@ addRule() {
 			if [ "${1}" = "group" ]; then shift; fi
 			GROUP="${1}"
 			if [ "${CUSTOMCHAIN}" != "" ]; then
-				echo "Unable to set CHAIN to: ${CHAIN}"
+				echo "Unable to set CHAIN to: ${CHAIN}" >&2
 				exit 1;
 			else
 				CUSTOMCHAIN="1"
@@ -372,7 +372,7 @@ add() {
 			shift;
 			addHost "${DIR}" "${@}"
 		else
-			echo "Unable to process add rule"
+			echo "Unable to process add rule" >&2
 			exit 1;
 		fi;
 	elif [ "${1}" = "interface" ]; then
@@ -385,7 +385,7 @@ add() {
 		shift;
 		applyRule "${@}"
 	else
-		echo "Unable to process add rule"
+		echo "Unable to process add rule" >&2
 		exit 1;
 	fi;
 }
@@ -438,7 +438,7 @@ addHost() {
 			applyRule "-A FORWARD -s ${IP} -j ${ALIAS}-OUT"
 		fi;
 	elif [ "${TYPE}" = "internal" ]; then
-		echo "Internal hosts must have an alias."
+		echo "Internal hosts must have an alias." >&2
 		exit 1;
 	fi;
 
