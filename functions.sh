@@ -594,7 +594,7 @@ addMember() {
 
 	if [ "${1}" = "group" ]; then
 		shift;
-		GROUP=${1}
+		TARGETGROUP=${1}
 		shift
 		ACTION="ACCEPT"
 		checkGroup ${GROUP}
@@ -647,7 +647,7 @@ addMember() {
 				exit 1;
 			fi;
 			checkGroup ${MEMBER}
-			applyRule "-A 'GROUP-${GROUP}' -j 'GROUP-${MEMBER}' ${COMMENT}"
+			applyRule "-A 'GROUP-${TARGETGROUP}' -j 'GROUP-${MEMBER}' ${COMMENT}"
 		elif [ "${MEMBERTYPE}" = "alias" -o  "${MEMBERTYPE}" = "network" ]; then
 			if [ "${MEMBERTYPE}" = "alias" ]; then
 				MEMBER=`fwget ${MEMBER}`
