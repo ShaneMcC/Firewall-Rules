@@ -597,7 +597,7 @@ addMember() {
 		TARGETGROUP=${1}
 		shift
 		ACTION="ACCEPT"
-		checkGroup ${GROUP}
+		checkGroup ${TARGETGROUP}
 
 	        if [ "${1}" = "direction" ]; then shift; fi;
 	        if [ "${1}" = "outbound" -o "${1}" = "inbound" ]; then
@@ -658,10 +658,10 @@ addMember() {
 			fi;
 
 			if [ "${DIRECTION}" = "outbound" -o "${DIRECTION}" = "" ]; then
-				applyRule "-A 'GROUP-${GROUP}' -d '${MEMBER}' -j '${ACTION}' ${COMMENT}"
+				applyRule "-A 'GROUP-${TARGETGROUP}' -d '${MEMBER}' -j '${ACTION}' ${COMMENT}"
 			fi;
 			if [ "${DIRECTION}" = "inbound" -o "${DIRECTION}" = "" ]; then
-				applyRule "-A 'GROUP-${GROUP}' -s '${MEMBER}' -j '${ACTION}' ${COMMENT}"
+				applyRule "-A 'GROUP-${TARGETGROUP}' -s '${MEMBER}' -j '${ACTION}' ${COMMENT}"
 			fi;
 		else
 			echo "Unknown membership."
