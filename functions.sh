@@ -197,6 +197,7 @@ checkTable() {
 	echo ${RES};
 }
 
+# Run a rule against a different table than the currently active table.
 with() {
 	log with "${@}"
 	if [ "${1}" = "table" ]; then
@@ -205,6 +206,7 @@ with() {
 	fi;
 }
 
+# Change the currently active table.
 table() {
 	log table "${@}"
 	doTable "${@}"
@@ -240,19 +242,22 @@ doTableWith() {
 	fi;
 }
 
+# Work with the input chain
 input() {
 	log input "${@}"
 	doChainCommand input "${@}"
 }
+# Work with the forward chain
 forward() {
 	log forward "${@}"
 	doChainCommand forward "${@}"
 }
+# Work with the output chain
 output() {
 	log output "${@}"
 	doChainCommand output "${@}"
 }
-
+# Work with input/forward/output chains at the same time.
 all() {
 	log all "${@}"
 	doChainCommand input "${@}"
@@ -515,6 +520,9 @@ add() {
 	if [ "${1}" = "host" -o "${1}" = "network" -o "${1}" = "net" ]; then
 		shift;
 		addHost "${@}"
+	elif [ "${1}" = "member" ]; then
+		shift;
+		addMember "${@}"
 	elif [ "${1}" = "internal" -o "${1}" = "external" -o "${1}" = "local" ]; then
 		DIR=${1}
 		shift;
@@ -558,6 +566,110 @@ interface() {
 	fwsettype "INTERFACE" "${ALIAS}" "1"
 }
 
+addMember() {
+	DIRECTION=""
+	MEMBERTYPE=""
+
+	if [ "${1}" = "direction" ]; then shift; fi;
+        if [ "${1}" = "outbound" -o "${1}" = "inbound" ]; then
+                DIRECTION="${1}"
+                shift;
+        fi;
+
+	if [ "${1}" = "group" -o "${1}" = "network" -o "${1}" = "alias" ]; then
+		MEMBERTYPE="${1}"
+		shift;
+	fi;
+
+	MEMBER="${1}"
+	shift;
+
+	if [ "${1}" = "direction" ]; then shift; fi;
+	if [ "${1}" = "outbound" -o "${1}" = "inbound" ]; then
+		DIRECTION="${1}"
+		shift;
+	fi;
+
+	if [ "${1}" = "to" ]; then shift; fi;
+
+	if [ "${1}" = "group" ]; then
+		shift;
+		GROUP=${1}
+		shift
+		ACTION="ACCEPT"
+		checkGroup ${GROUP}
+
+	        if [ "${1}" = "direction" ]; then shift; fi;
+	        if [ "${1}" = "outbound" -o "${1}" = "inbound" ]; then
+	                DIRECTION="${1}"
+	                shift;
+	        fi;
+
+		if [ "${1}" = "action" ]; then
+			shift;
+			ACTION="${1}"
+			shift;
+		fi;
+
+		COMMENT=""
+		if [ "${1}" = "comment" ]; then
+			shift;
+			if [ "${COMMENT}" != "" ]; then COMMENT="${COMMENT} "; fi;
+			COMMENT=${COMMENT}"${1}"
+			shift;
+		fi;
+
+		if [ "${COMMENT}" != "" ]; then
+			COMMENT=' -m comment --comment "'${COMMENT}'"'
+		fi;
+
+		if [ "${MEMBERTYPE}" = "" ]; then
+			# Figure out the type...
+			ISGROUP=`fwgettype "GROUP" "${MEMBER}"`
+			ISALIAS=`fwgettype "ALIAS" "${MEMBER}"`
+			if [ "${ISGROUP}" = "1" ]; then
+				MEMBERTYPE="group"
+			elif [ "${ISALIAS}" = "1" ]; then
+				MEMBERTYPE="alias"
+			else
+				MEMBERTYPE="network"
+			fi;
+		fi;
+
+
+		if [ "${MEMBERTYPE}" = "group" ]; then
+			if [ "${ACTION}" != "ACCEPT" ]; then
+                                echo "Action can not be specified when adding a group as a member."
+                                exit 1;
+                        fi;
+			if [ "${DIRECTION}" != "" ]; then
+				echo "Direction can not be specified when adding a group as a member."
+				exit 1;
+			fi;
+			checkGroup ${MEMBER}
+			applyRule "-A 'GROUP-${GROUP}' -j 'GROUP-${MEMBER}' ${COMMENT}"
+		elif [ "${MEMBERTYPE}" = "alias" -o  "${MEMBERTYPE}" = "network" ]; then
+			if [ "${MEMBERTYPE}" = "alias" ]; then
+				MEMBER=`fwget ${MEMBER}`
+				if [ "${MEMBER}" = "" ]; then
+					echo "Unknown member."
+					exit 1;
+				fi;
+			fi;
+
+			if [ "${DIRECTION}" = "outbound" -o "${DIRECTION}" = "" ]; then
+				applyRule "-A 'GROUP-${GROUP}' -d '${MEMBER}' -j '${ACTION}' ${COMMENT}"
+			fi;
+			if [ "${DIRECTION}" = "inbound" -o "${DIRECTION}" = "" ]; then
+				applyRule "-A 'GROUP-${GROUP}' -s '${MEMBER}' -j '${ACTION}' ${COMMENT}"
+			fi;
+		else
+			echo "Unknown membership."
+			exit 1;
+		fi;
+	fi;
+}
+
 addHost() {
 	TYPE="internal"
 	if [ "${1}" = "external" -o "${1}" = "internal" -o "${1}" = "local" ]; then
@@ -587,6 +699,7 @@ addHost() {
 			applyRule "-A FORWARD -d ${IP} -j ${ALIAS}-IN"
 			applyRule "-A FORWARD -s ${IP} -j ${ALIAS}-OUT"
 		fi;
+		fwsettype "ALIAS" "${ALIAS}" "1"
 	elif [ "${TYPE}" = "internal" ]; then
 		echo "Internal hosts must have an alias." >&2
 		exit 1;
@@ -598,6 +711,14 @@ addHost() {
 		shift
 		ACTION="ACCEPT"
 		checkGroup ${GROUP}
+
+		DIRECTION=""
+		if [ "${1}" = "direction" ]; then shift; fi;
+		if [ "${1}" = "outbound" -o "${1}" = "inbound" ]; then
+			DIRECTION="${1}"
+			shift;
+		fi;
+
 
 		if [ "${1}" = "action" ]; then
 			shift;
@@ -616,8 +737,14 @@ addHost() {
 			COMMENT=' -m comment --comment "'${COMMENT}'"'
 		fi;
 
-		applyRule "-A 'GROUP-${GROUP}' -s '${IP}' -j ${ACTION} ${COMMENT}"
+		if [ "${DIRECTION}" = "inbound" -o "${DIRECTION}" = "" ]; then
+			applyRule "-A 'GROUP-${GROUP}' -s '${IP}' -j ${ACTION} ${COMMENT}"
+		fi;
+		if [ "${DIRECTION}" = "outbound" -o "${DIRECTION}" = "" ]; then
+			applyRule "-A 'GROUP-${GROUP}' -d '${IP}' -j ${ACTION} ${COMMENT}"
+		fi;
 	fi;
+
 }
 
 checkGroup() {
